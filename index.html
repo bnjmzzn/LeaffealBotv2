@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Entry Logger HTML</title>
+    <script>
+        const CONFIG = {
+            "PHYSICS": {
+                "schedule": ["mon", "tue"],
+                "discord_channel": "1234567890",
+                "color": "#9bf6ff"
+            },
+            "ENGLISH": {
+                "schedule": ["mon", "thu"],
+                "discord_channel": "1234567890",
+                "color": "#ffd6A5"
+            },
+            "SCIENCE": {
+                "schedule": ["mon", "wed"],
+                "discord_channel": "1234567890",
+                "color": "#fdffb6"
+            },
+            "HISTORY": {
+                "schedule": ["tue", "fri"],
+                "discord_channel": "1234567890",
+                "color": "#caffbf"
+            },
+            "SORCERY": {
+                "schedule": ["wed", "thu"],
+                "discord_channel": "1234567890",
+                "color": "#ffadad"
+            }
+        }
+        
+        const api_url = "http://127.0.0.1:12345/";
+        const api_auth = "Bearer authorization_123";
+    </script>
+    <style>
+        .subject-box {
+            margin: 10px;
+            padding: 10px;
+            border: 2px solid black;
+        }
+        
+        .subject-box > * {
+            margin: 5px;
+        }
+        
+        .content-textarea {
+            resize: none;
+            width: 100%;
+            background: rgba(0, 0, 0, 0);
+        }
+        
+        #payload-container,
+        #control-container,
+        #output-container {
+            border: 2px solid black;
+            padding: 5px;
+            margin-bottom: 5px;
+        }
+        
+        .preview-content {
+            max-width: 100px;
+            max-height: 100px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="template" style="display: none;">
+        <div id="subject-template" class="subject-box">
+            <div class="subject-head">
+                <select class="select-subject" onchange="change_color(this)"></select>
+                <select class="select-type" onchange="check_HW(this)">
+                    <option>LESSON</option>
+                    <option>ACTIVITY</option>
+                    <option>ASSIGNMENT</option>
+                    <option>NOTE</option>
+                    <option>RESOURCE</option>
+                </select>
+                <input type="date" class="date-info">
+                <span class="trash-span">
+                    <button onclick="toggle_confirm(this)">&#x1F5D1;&#xFE0F;</button>
+                </span>
+                <span class="confirm-span" style="display: none;">
+                    <button onclick="toggle_confirm(this)">&#x274C;</button>
+                    <button onclick="self_delete(this)">&#x2705;</button>
+                </span>
+            </div>
+            <div class="subject-content row">
+                <textarea class="content-textarea" oninput="resize_textarea(this)"></textarea>
+                <br>
+                <input class="content-file" type="file" multiple onchange="file_preview(event)">
+                <button onclick="clear_files(this)">&#x1F5D1;&#xFE0F;</button>
+                <div class="content-file-preview"></div>
+            </div>
+        </div>
+    </div>
+    <div id="payload-container"></div>
+    <div id="control-container">
+        <button onclick="clone_subject('PHYSICS', 'LESSON');">clone subject</button>
+        <button onclick="submit_data()">submet</button>
+        <span>
+            <span class="trash-span">
+                <button onclick="toggle_confirm(this)">&#x1F5D1;&#xFE0F; ALL</button>
+            </span>
+            <span class="confirm-span" style="display: none;">
+                <button onclick="toggle_confirm(this)">&#x274C; CANCEL</button>
+                <button onclick="delete_all(); toggle_confirm(this)">&#x2705; CONFIRM</button>
+            </span>
+        </span>
+        <br> generate from schedule:
+        <input type="date" oninput="load_schedule(this)">
+        <br> set all date:
+        <input type="date" oninput="set_all_date(this)">
+    </div>
+    <div id="output-container">
+        <div>
+            <button onclick="fetch_data()">fetch data</button>
+            <input type="date" onchange="generate_logs(this)">
+        </div>
+        <textarea id="write-box"></textarea>
+    </div>
+    <script>
+        let fetched_data = {};
+        add_subject_options();
+        
+        function add_subject_options() {
+            const subjects = Object.keys(CONFIG);
+            
+            for (subject of subjects) {
+                subject_box = document.querySelector(".subject-box");
+                select_subject = subject_box.querySelector(".select-subject");
+                
+                option = document.createElement("option");
+                option.text = subject;
+                option.value = subject;
+                
+                select_subject.appendChild(option);
+            }
+        }
+        
+        
+        function toggle_confirm(button) {
+            const container = button.parentElement.parentElement;
+            const confirm_span = container.querySelector(".confirm-span");
+            const trash_span = container.querySelector(".trash-span");
+            confirm_span.style.display = confirm_span.style.display === "none" ? "inline-block" : "none";
+            trash_span.style.display = trash_span.style.display === "none" ? "inline-block" : "none";
+        }
+        
+        function clear_files(clear_files_button) {
+            const subject_box = clear_files_button.closest(".subject-box");
+            
+            subject_box.querySelector(".content-file").value = "";
+            subject_box.querySelector(".content-file-preview").innerHTML = "";
+        }
+        
+        function self_delete(element) {
+            const subject_box = element.closest(".subject-box");
+            document.querySelector("#payload-container").removeChild(subject_box);
+        }
+        
+        function resize_textarea(textarea) {
+            textarea.style.height = "auto";
+            textarea.style.height = textarea.scrollHeight + "px";
+        }
+        
+        function change_color(select_element) {
+            const subject_box = select_element.closest(".subject-box");
+            const select_subject = subject_box.querySelector(".select-subject");
+            subject_box.style.background = CONFIG[select_subject.value]["color"];
+        }
+        
+        function check_HW(select_element) {
+            const subject_box = select_element.closest(".subject-box");
+            const content_box = subject_box.querySelector(".subject-content");
+            
+            if (select_element.options[select_element.selectedIndex].textContent == "ASSIGNMENT") {
+                const input_deadline = document.createElement("input");
+                input_deadline.type = "date";
+                input_deadline.classList.add("content-deadline");
+                
+                content_box.appendChild(input_deadline);
+                return;
+            };
+            subject_box.querySelector(".content-deadline")?.remove();
+        }
+        
+        function clone_subject(subject_name, subject_type) {
+            const payload_container = document.querySelector("#payload-container");
+            const subject_template = document.querySelector("#subject-template");
+            
+            const subject_clone = subject_template.cloneNode(true);
+            const select_subject = subject_clone.querySelector(".select-subject");
+            const select_type = subject_clone.querySelector(".select-type");
+            const subject_date_element = subject_clone.querySelector(".date-info");
+            
+            function set_select_option(select_element, target_option_name) {
+                options_array = Array.from(select_element.options);
+                target_option_index = options_array.findIndex(option => option.value === target_option_name);
+                select_element.selectedIndex = target_option_index;
+            }
+            
+            set_select_option(select_subject, subject_name);
+            set_select_option(select_type, subject_type);
+            
+            subject_clone.removeAttribute("subject-template");
+            subject_clone.style.background = CONFIG[select_subject.value]["color"];
+            
+            payload_container.appendChild(subject_clone);
+        }
+        
+        function load_schedule(date_element) {
+            const selected_date = new Date(date_element.value);
+            const day = selected_date.toLocaleDateString("en-US", {weekday: "short"}).toLowerCase();
+            
+            for (subject in CONFIG) {
+                if (CONFIG[subject]["schedule"].includes(day)) {
+                    clone_subject(subject, "LESSON");
+                    clone_subject(subject, "ACTIVITY");
+                };
+            };
+            set_all_date(date_element);
+        }
+        
+        function set_all_date(date_element) {
+            const payload_container = document.querySelector("#payload-container");
+            const subject_boxes = payload_container.querySelectorAll(".subject-box");
+            
+            for (subject_box of subject_boxes) {
+                subject_box.querySelector(".date-info").value = date_element.value;
+            };
+        }
+        
+        function delete_all() {
+            const payload_container = document.querySelector("#payload-container");
+            const subject_boxes = payload_container.querySelectorAll(".subject-box");
+            
+            for (subject_box of subject_boxes) {
+                payload_container.removeChild(subject_box);
+            };
+        }
+        
+        function file_preview(event) {
+            const file_list = event.target.files;
+            const file_box = event.target.parentElement.querySelector(".content-file-preview");
+            file_box.innerHTML = "";
+            
+            for (file of file_list) {
+                const reader = new FileReader();
+                
+                reader.onload = function(e) {
+                    let preview;
+                    
+                    if (file.type.startsWith("image/")) {
+                        preview = document.createElement("img");
+                    } else if (file.type.startsWith("video/")) {
+                        preview = document.createElement("video");
+                        preview.setAttribute("controls", "controls");
+                    } else {
+                        preview = document.createElement("img");
+                        preview.src = "404.png";
+                    }
+                    preview.className = "preview-content";
+                    preview.src = e.target.result;
+                    preview.title = file.name;
+                    file_box.appendChild(preview);
+                }
+                reader.readAsDataURL(file);
+            }
+        }
+        
+        function generate_form_data() {
+            const payload_container = document.querySelector("#payload-container");
+            const subject_boxes = payload_container.querySelectorAll(".subject-box");
+            let form_data = new FormData();
+            let subjects_data = [];
+            
+            for (subject_box of subject_boxes) {
+                const subject_name = subject_box.querySelector(".select-subject option:checked").textContent;
+                const subject_type = subject_box.querySelector(".select-type option:checked").textContent;
+                const subject_date = subject_box.querySelector(".date-info").value;
+                const content_text = subject_box.querySelector(".content-textarea").value;
+                const content_file = subject_box.querySelector(".content-file");
+                const content_deadline = subject_box?.querySelector(".content-deadline")?.value || "";
+                
+                data = {
+                    subject_name, subject_type, subject_date, content_text, content_deadline
+                };
+                subjects_data.push(data);
+                
+                for (file of content_file.files) {
+                    form_data.append(`file.${subject_name}.${subject_type}`, file);
+                };
+            }
+            
+            form_data.append("data", JSON.stringify(subjects_data));
+            form_data.append("config", JSON.stringify(CONFIG));
+            
+            return form_data;
+        }
+        
+        function submit_data() {
+            write("submitting data");
+            const form_data = generate_form_data();
+            const url = api_url + "upload";
+            
+            fetch(url, {
+                    method: "POST",
+                    headers: {
+                        "Authorization": api_auth
+                    },
+                    body: form_data
+                })
+                .then(response => {
+                    console.log(response);
+                    return response.json();
+                })
+                .then(data => {
+                    console.log(data);
+                    write(data);
+                })
+                .catch(error => {
+                    console.error(error);
+                    write(error);
+                });
+        }
+        
+        function fetch_data() {
+            write("fetching data");
+            form_data = new FormData();
+            form_data.append("config", JSON.stringify(CONFIG));
+            const url = api_url + "fetch";
+            
+            fetch(url, {
+                    method: "POST",
+                    headers: {
+                        "Authorization": api_auth
+                    },
+                    body: form_data
+                })
+                .then(response => {
+                    console.log(response);
+                    return response.json();
+                })
+                .then(data => {
+                    console.log(data);
+                    fetched_data = data;
+                    write(fetched_data);
+                })
+                .catch(error => {
+                    console.error(error);
+                    write(error)
+                });
+        }
+        
+        function generate_logs(date_input_element) {
+            let content = [];
+            let clean_data = {};
+            let = filtered_data = [];
+            
+            if (fetched_data && fetched_data.length > 0) {
+                filtered_data = fetched_data.filter(subject => subject["subject_date"] == date_input_element.value);
+            };
+            
+            const input_date = new Date(date_input_element.value);
+            const options = {
+                year: "numeric",
+                month: "long",
+                day: "numeric"
+            };
+            const formatted_date = input_date.toLocaleDateString("en-US", options);
+            const weekday = new Intl.DateTimeFormat("en-US", {
+                weekday: "long"
+            }).format(input_date);
+            const formatted_date_weekday = `${formatted_date} ${weekday}`;
+            
+            content.push(formatted_date_weekday);
+            content.push("\n\n");
+            
+            for (subject of filtered_data) {
+                const subject_name = subject["subject_name"];
+                const subject_type = subject["subject_type"];
+                const content_text = subject["subject_body"];
+                const content_deadline = subject["subject_deadline"];
+                
+                if (!clean_data[subject_name]) {
+                    clean_data[subject_name] = {};
+                };
+                
+                if (!clean_data[subject_name][subject_type]) {
+                    clean_data[subject_name][subject_type] = content_text;
+                };
+            };
+            
+            for (subject_name of Object.keys(clean_data)) {
+                content.push(subject_name);
+                content.push("\n\n");
+                
+                for (subject_type of Object.keys(clean_data[subject_name])) {
+                    content.push(subject_type);
+                    content.push(":\n");
+                    content.push(clean_data[subject_name][subject_type]);
+                    content.push("\n\n");
+                };
+                content.push("\n\n");
+            };
+            content.push("DISMISSAL: ");
+            content_string = content.join("");
+            write(content_string);
+        }
+        
+        function write(string) {
+            const write_box = document.querySelector("#write-box");
+            write_box.value = string;
+            resize_textarea(write_box);
+        }
+    </script>
+</body>
+</html>
